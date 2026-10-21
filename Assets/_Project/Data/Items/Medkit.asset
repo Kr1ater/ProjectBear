@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1a8f036cba16844bb89624935434cb19, type: 3}
+  m_Name: Medkit
+  m_EditorClassIdentifier: DeadAir::DeadAir.Items.ItemDefinition
+  id: medkit
+  displayName: "\u041C\u0435\u0434\u043F\u0430\u043A\u0435\u0442"
+  description: "\u0421\u0442\u0430\u043D\u0434\u0430\u0440\u0442\u043D\u0430\u044F
+    \u0430\u043F\u0442\u0435\u0447\u043A\u0430 \u0427\u0412\u041A: \u0431\u0438\u043D\u0442,
+    \u0433\u0435\u043C\u043E\u0441\u0442\u0430\u0442\u0438\u043A, \u043E\u0431\u0435\u0437\u0431\u043E\u043B\u0438\u0432\u0430\u044E\u0449\u0435\u0435."
+  icon: {fileID: 21300000, guid: 9cc85919dda6f48098ccff9f6b11f526, type: 3}
+  category: 0
+  weight: 0.5
+  maxStack: 5
+  pickupMode: 0
+  salvageResult: []
+  worldPrefab: {fileID: 4597713381807863551, guid: b6cfd9798a2834ff78e804b03f760911, type: 3}

@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1a8f036cba16844bb89624935434cb19, type: 3}
+  m_Name: OldRadio
+  m_EditorClassIdentifier: DeadAir::DeadAir.Items.ItemDefinition
+  id: old_radio
+  displayName: "\u0421\u0442\u0430\u0440\u0430\u044F \u0440\u0430\u0446\u0438\u044F"
+  description: "\u0410\u0440\u043C\u0435\u0439\u0441\u043A\u0430\u044F \u0440\u0430\u0446\u0438\u044F
+    \u0441\u0442\u0430\u0440\u043E\u0433\u043E \u043E\u0431\u0440\u0430\u0437\u0446\u0430.
+    \u041D\u0435 \u0432\u043A\u043B\u044E\u0447\u0430\u0435\u0442\u0441\u044F."
+  icon: {fileID: 21300000, guid: 6521e87374866499eb9d572a85216a18, type: 3}
+  category: 2
+  weight: 3
+  maxStack: 1
+  pickupMode: 1
+  salvageResult:
+  - item: {fileID: 11400000, guid: 619da66dc099846c5a799c3d371e7804, type: 2}
+    amount: 2
+  - item: {fileID: 11400000, guid: 28e664f69a48447e797dabea0d119c9b, type: 2}
+    amount: 1
+  - item: {fileID: 11400000, guid: 2d534ebecfa904293a15aa63fc69e6e7, type: 2}
+    amount: 2
+  worldPrefab: {fileID: 5083093683901971643, guid: 3a7459b0755e64175b0361075f63b708, type: 3}
