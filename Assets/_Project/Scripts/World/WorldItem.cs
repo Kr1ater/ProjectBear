@@ -13,9 +13,13 @@ namespace DeadAir.World
         [SerializeField] private float markerHeight = 0.2f;
 
         private Collider bounds;
+        private bool droppedByPlayer;
 
         public ItemDefinition Item => item;
         public int Amount => amount;
+
+        // Выброшенное игроком подбирается только по клавише: иначе вернулось бы в инвентарь с первым же шагом.
+        public PickupMode PickupMode => droppedByPlayer ? PickupMode.Manual : item.PickupMode;
 
         public Vector3 MarkerPosition
         {
@@ -31,12 +35,26 @@ namespace DeadAir.World
             bounds = GetComponent<Collider>();
         }
 
-        // Забирает часть кучки. Когда ничего не осталось, предмет исчезает из мира.
-        public void Take(int count)
+        // Кладёт в мир модель предмета из его ассета. Используется при выбросе из инвентаря.
+        public static WorldItem SpawnDropped(ItemDefinition item, int amount, Vector3 position, Quaternion rotation)
         {
-            amount -= Mathf.Clamp(count, 0, amount);
-            if (amount == 0)
-                Destroy(gameObject);
+            var spawned = Instantiate(item.WorldPrefab, position, rotation).GetComponent<WorldItem>();
+            spawned.amount = amount;
+            spawned.droppedByPlayer = true;
+            return spawned;
+        }
+
+        // Забирает часть кучки и отправляет её в полёт к рюкзаку. Если забрано всё, улетает сам объект,
+        // иначе — его копия, а кучка остаётся с меньшим количеством.
+        public void Take(int count, Transform collector)
+        {
+            count = Mathf.Clamp(count, 0, amount);
+            if (count == 0)
+                return;
+
+            amount -= count;
+            var flying = amount == 0 ? gameObject : Instantiate(gameObject, transform.position, transform.rotation);
+            ItemFlight.ToCollector(flying, collector);
         }
     }
 }

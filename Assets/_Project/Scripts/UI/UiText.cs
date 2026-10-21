@@ -54,6 +54,8 @@ namespace DeadAir.UI
             _ => $"{result.Item.DisplayName}: компоненты не поместятся по весу"
         };
 
+        public static string Dropped(ItemDefinition item, int amount) => $"−{amount} {item.DisplayName}";
+
         public static string Components(ItemDefinition item) =>
             string.Join(", ", item.SalvageResult.Select(part => $"{part.Amount} {part.Item.DisplayName}"));
     }

@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 namespace DeadAir.UI
 {
-    // Панель деталей выбранного предмета. Только показывает: разборку запускает InventoryUI.
+    // Панель деталей выбранного предмета. Только показывает: разборку и выброс запускает InventoryUI.
     public sealed class ItemDetailsPanel : MonoBehaviour
     {
         [SerializeField] private GameObject content;
@@ -18,10 +18,12 @@ namespace DeadAir.UI
         [SerializeField] private GameObject salvageBlock;
         [SerializeField] private TMP_Text componentsText;
         [SerializeField] private Button salvageButton;
+        [SerializeField] private Button dropButton;
 
         public Button SalvageButton => salvageButton;
+        public Button DropButton => dropButton;
 
-        public void Show(ItemDefinition item, int count, bool canSalvage)
+        public void Show(ItemDefinition item, int count, bool canSalvage, bool canDrop)
         {
             content.SetActive(item != null);
             if (item == null)
@@ -37,6 +39,8 @@ namespace DeadAir.UI
                 $"В инвентаре: {count} · стопка до {item.MaxStack}\n" +
                 $"Подбор: {UiText.Pickup(item.PickupMode)}";
 
+            dropButton.interactable = canDrop;
+            salvageButton.gameObject.SetActive(item.IsSalvageable);
             salvageBlock.SetActive(item.IsSalvageable);
             if (!item.IsSalvageable)
                 return;

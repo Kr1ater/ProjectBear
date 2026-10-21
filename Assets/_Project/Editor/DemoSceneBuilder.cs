@@ -233,9 +233,15 @@ namespace DeadAir.EditorTools
             cameraTarget.SetParent(player.transform, false);
             cameraTarget.localPosition = new Vector3(0f, 1.6f, 0f);
 
+            // Центр рюкзака: сюда притягивается подобранное и отсюда вылетает выброшенное.
+            var backpack = new GameObject("BackpackAnchor").transform;
+            backpack.SetParent(player.transform, false);
+            backpack.localPosition = new Vector3(0f, 1.15f, -0.35f);
+
             player.AddComponent<InputReader>();
             player.AddComponent<PlayerInventory>();
             player.AddComponent<LootSensor>();
+            player.AddComponent<ItemDropper>();
             player.AddComponent<PlayerController>();
             SetLayerRecursively(player, PlayerLayer);
             return player;
@@ -259,13 +265,17 @@ namespace DeadAir.EditorTools
         private static void WirePlayer(GameObject player, Camera camera, Transform cameraTarget)
         {
             var input = player.GetComponent<InputReader>();
+            var backpack = player.transform.Find("BackpackAnchor");
             Wire(input,
                 ("move", InputAction("Move")), ("look", InputAction("Look")), ("interact", InputAction("Interact")),
-                ("toggleInventory", InputAction("ToggleInventory")), ("salvage", InputAction("Salvage")));
+                ("toggleInventory", InputAction("ToggleInventory")), ("salvage", InputAction("Salvage")),
+                ("drop", InputAction("Drop")));
             Wire(player.GetComponent<PlayerInventory>(), ("maxWeight", 15f));
             Wire(player.GetComponent<LootSensor>(),
                 ("playerInventory", player.GetComponent<PlayerInventory>()), ("input", input), ("viewCamera", camera),
-                ("lootMask", 1 << LootLayer), ("occluderMask", DefaultMask));
+                ("backpack", backpack), ("lootMask", 1 << LootLayer), ("occluderMask", DefaultMask));
+            Wire(player.GetComponent<ItemDropper>(),
+                ("playerInventory", player.GetComponent<PlayerInventory>()), ("backpack", backpack), ("groundMask", DefaultMask));
             Wire(player.GetComponent<PlayerController>(), ("input", input), ("cameraTransform", camera.transform));
             Wire(camera.GetComponent<ThirdPersonCamera>(),
                 ("input", input), ("target", cameraTarget), ("obstacleMask", DefaultMask));
@@ -290,7 +300,7 @@ namespace DeadAir.EditorTools
             var root = (RectTransform)canvasGo.transform;
 
             var feed = BuildHud(root, player, camera, hudText);
-            BuildInventoryScreen(root, playerInventory, player.GetComponent<InputReader>(), feed);
+            BuildInventoryScreen(root, playerInventory, player.GetComponent<ItemDropper>(), player.GetComponent<InputReader>(), feed);
             // Лента поверх затемнения инвентаря: сообщения о разборке видны при открытом экране.
             feed.transform.SetParent(root, false);
             feed.transform.SetAsLastSibling();
@@ -319,6 +329,10 @@ namespace DeadAir.EditorTools
             focusFitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             focusFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             var focusText = UiFactory.Text(focusLabel, "Text", "[E] Подобрать", 22f, UiPalette.Text, TextAlignmentOptions.MidlineLeft);
+            var focusGroup = focusLabel.gameObject.AddComponent<CanvasGroup>();
+            focusGroup.alpha = 0f;
+            focusGroup.blocksRaycasts = false;
+            focusGroup.interactable = false;
 
             var messagesRect = UiFactory.Rect("Messages", hud).Anchor(Vector2.zero, Vector2.zero, new Vector2(48f, 116f), new Vector2(1000f, 126f));
             var messagesLayout = messagesRect.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -344,7 +358,7 @@ namespace DeadAir.EditorTools
             Wire(lootMarkers,
                 ("sensor", player.GetComponent<LootSensor>()), ("viewCamera", camera),
                 ("markerPrefab", AssetDatabase.LoadAssetAtPath<Image>(MarkerPrefabPath)), ("container", markers),
-                ("focusLabel", focusLabel), ("focusLabelText", focusText));
+                ("focusLabel", focusLabel), ("focusLabelGroup", focusGroup), ("focusLabelText", focusText));
 
             var hudUi = hud.gameObject.AddComponent<HudUI>();
             Wire(hudUi, ("sensor", player.GetComponent<LootSensor>()), ("messages", feed), ("weightBar", weightBar));
@@ -379,7 +393,8 @@ namespace DeadAir.EditorTools
             return bar;
         }
 
-        private static void BuildInventoryScreen(RectTransform root, PlayerInventory playerInventory, InputReader input, MessageFeed feed)
+        private static void BuildInventoryScreen(RectTransform root, PlayerInventory playerInventory, ItemDropper dropper,
+            InputReader input, MessageFeed feed)
         {
             var inventoryRoot = UiFactory.Rect("Inventory", root).Stretch();
             var screen = UiFactory.Rect("Screen", inventoryRoot).Stretch();
@@ -442,13 +457,13 @@ namespace DeadAir.EditorTools
             var details = BuildDetails(panel);
 
             var hint = UiFactory.Text(panel, "Hint",
-                $"{Key("Tab")} закрыть     {Key("ЛКМ")} выбрать     {Key("X")} разобрать",
+                $"{Key("Tab")} закрыть     {Key("ЛКМ")} выбрать     {Key("X")} разобрать     {Key("G")} выбросить",
                 18f, UiPalette.Muted, TextAlignmentOptions.BottomLeft);
             hint.rectTransform.Anchor(Vector2.zero, Vector2.zero, new Vector2(32f, 22f), new Vector2(800f, 28f));
 
             var inventoryUi = inventoryRoot.gameObject.AddComponent<InventoryUI>();
             Wire(inventoryUi,
-                ("playerInventory", playerInventory), ("input", input), ("messages", feed),
+                ("playerInventory", playerInventory), ("dropper", dropper), ("input", input), ("messages", feed),
                 ("screen", screen.gameObject), ("weightBar", weightBar), ("tabs", tabs),
                 ("rowPrefab", AssetDatabase.LoadAssetAtPath<InventoryRow>(RowPrefabPath)), ("rowContainer", content),
                 ("emptyText", empty), ("details", details));
@@ -505,36 +520,56 @@ namespace DeadAir.EditorTools
             stats.lineSpacing = 10f;
             stats.rectTransform.TopLeft(0f, 214f, 444f, 86f);
 
-            var salvageBlock = UiFactory.Rect("Salvage", content).TopLeft(0f, 304f, 444f, 156f);
+            var salvageBlock = UiFactory.Rect("Salvage", content).TopLeft(0f, 304f, 444f, 104f);
             var salvageHeader = UiFactory.Text(salvageBlock, "Header", "ПРИ РАЗБОРКЕ", 16f, UiPalette.Muted, TextAlignmentOptions.TopLeft);
             salvageHeader.characterSpacing = 4f;
             salvageHeader.rectTransform.TopLeft(0f, 0f, 444f, 22f);
             var components = UiFactory.Text(salvageBlock, "Components", "2 × Проводка", 20f, UiPalette.Text, TextAlignmentOptions.TopLeft);
-            components.rectTransform.TopLeft(0f, 28f, 444f, 78f);
+            components.rectTransform.TopLeft(0f, 28f, 444f, 76f);
 
-            var buttonRect = UiFactory.Rect("SalvageButton", salvageBlock).TopLeft(0f, 108f, 280f, 44f);
-            // Цвета непрозрачные: тёмный янтарный фон, при наведении светлее. Янтарный текст остаётся акцентом.
-            var buttonBackground = UiFactory.Image(buttonRect, Color.white, raycast: true);
-            var button = buttonRect.gameObject.AddComponent<Button>();
-            button.targetGraphic = buttonBackground;
-            var colors = ColorBlock.defaultColorBlock;
-            colors.normalColor = Hex(0x3A2E1C);
-            colors.highlightedColor = Hex(0x4A3A22);
-            colors.pressedColor = Hex(0x56432A);
-            colors.selectedColor = Hex(0x3A2E1C);
-            colors.disabledColor = Hex(0x2A2622);
-            colors.fadeDuration = 0.08f;
-            button.colors = colors;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            var buttonLabel = UiFactory.Text(buttonRect, "Label", $"Разобрать   {Key("X")}", 20f, UiPalette.Amber, TextAlignmentOptions.Center);
-            buttonLabel.rectTransform.Stretch();
+            // Ряд кнопок: «Разобрать» есть только у хлама, и когда она скрыта, «Выбросить» встаёт на её место.
+            var buttons = UiFactory.Rect("Buttons", content).TopLeft(0f, 414f, 444f, 44f);
+            var buttonsLayout = buttons.gameObject.AddComponent<HorizontalLayoutGroup>();
+            buttonsLayout.spacing = 12f;
+            buttonsLayout.childControlWidth = true;
+            buttonsLayout.childControlHeight = true;
+            buttonsLayout.childForceExpandWidth = false;
+            buttonsLayout.childForceExpandHeight = true;
+            // Акцентная кнопка — тёмный янтарный фон, нейтральная — на ступень светлее панели.
+            var salvageButton = BuildActionButton(buttons, "SalvageButton", "Разобрать", "X", UiPalette.Amber,
+                Hex(0x3A2E1C), Hex(0x4A3A22), Hex(0x56432A));
+            var dropButton = BuildActionButton(buttons, "DropButton", "Выбросить", "G", UiPalette.Text,
+                UiPalette.PanelRaised, Hex(0x3A3732), Hex(0x45413B));
 
             var panelView = details.gameObject.AddComponent<ItemDetailsPanel>();
             Wire(panelView,
                 ("content", content.gameObject), ("icon", icon), ("nameText", nameText), ("categoryText", categoryText),
                 ("descriptionText", description), ("statsText", stats), ("salvageBlock", salvageBlock.gameObject),
-                ("componentsText", components), ("salvageButton", button));
+                ("componentsText", components), ("salvageButton", salvageButton), ("dropButton", dropButton));
             return panelView;
+        }
+
+        // Кнопка с непрозрачными цветами: полупрозрачные в линейном цветовом пространстве выходят слишком яркими.
+        private static Button BuildActionButton(RectTransform parent, string name, string label, string key, Color textColor,
+            Color normal, Color highlighted, Color pressed)
+        {
+            var rect = UiFactory.Rect(name, parent);
+            var layout = rect.gameObject.AddComponent<LayoutElement>();
+            layout.preferredWidth = 216f;
+            var background = UiFactory.Image(rect, Color.white, raycast: true);
+            var button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = background;
+            var colors = ColorBlock.defaultColorBlock;
+            colors.normalColor = normal;
+            colors.highlightedColor = highlighted;
+            colors.pressedColor = pressed;
+            colors.selectedColor = normal;
+            colors.disabledColor = Hex(0x2A2622);
+            colors.fadeDuration = 0.08f;
+            button.colors = colors;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+            UiFactory.Text(rect, "Label", $"{label}   {Key(key)}", 20f, textColor, TextAlignmentOptions.Center).rectTransform.Stretch();
+            return button;
         }
 
         private static string Key(string key) => $"<color=#{ColorUtility.ToHtmlStringRGB(UiPalette.Amber)}>[{key}]</color>";

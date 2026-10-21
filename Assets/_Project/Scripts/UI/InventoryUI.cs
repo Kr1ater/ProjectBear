@@ -7,11 +7,12 @@ using UnityEngine;
 
 namespace DeadAir.UI
 {
-    // Экран инвентаря: список стопок, фильтр по категориям, детали и разборка.
-    // Данные не меняет сам — только через Inventory и SalvageService.
+    // Экран инвентаря: список стопок, фильтр по категориям, детали, разборка и выброс.
+    // Данные не меняет сам — только через Inventory, SalvageService и ItemDropper.
     public sealed class InventoryUI : MonoBehaviour
     {
         [SerializeField] private PlayerInventory playerInventory;
+        [SerializeField] private ItemDropper dropper;
         [SerializeField] private InputReader input;
         [SerializeField] private MessageFeed messages;
 
@@ -42,6 +43,7 @@ namespace DeadAir.UI
                 tab.Button.onClick.AddListener(() => SelectTab(captured));
             }
             details.SalvageButton.onClick.AddListener(SalvageSelected);
+            details.DropButton.onClick.AddListener(DropSelected);
 
             activeTab = tabs[0];
             screen.SetActive(false);
@@ -51,6 +53,7 @@ namespace DeadAir.UI
         {
             input.ToggleInventoryPressed += Toggle;
             input.SalvagePressed += SalvageSelected;
+            input.DropPressed += DropSelected;
             Inventory.OnChanged += Refresh;
         }
 
@@ -58,6 +61,7 @@ namespace DeadAir.UI
         {
             input.ToggleInventoryPressed -= Toggle;
             input.SalvagePressed -= SalvageSelected;
+            input.DropPressed -= DropSelected;
             Inventory.OnChanged -= Refresh;
         }
 
@@ -97,6 +101,17 @@ namespace DeadAir.UI
                 weightBar.Flash();
         }
 
+        // Выбрасывает одну единицу выбранного предмета.
+        private void DropSelected()
+        {
+            if (!IsOpen || selected == null)
+                return;
+
+            var item = selected;
+            if (dropper.Drop(item))
+                messages.Show(UiText.Dropped(item, 1));
+        }
+
         private void Refresh()
         {
             if (!IsOpen)
@@ -127,7 +142,9 @@ namespace DeadAir.UI
 
             emptyText.gameObject.SetActive(visibleStacks.Count == 0);
             int count = selected != null ? Inventory.CountOf(selected) : 0;
-            details.Show(selected, count, playerInventory.Salvage.Check(selected) == SalvageStatus.Ok);
+            details.Show(selected, count,
+                canSalvage: playerInventory.Salvage.Check(selected) == SalvageStatus.Ok,
+                canDrop: dropper.CanDrop(selected));
         }
 
         private InventoryRow GetRow(int index)

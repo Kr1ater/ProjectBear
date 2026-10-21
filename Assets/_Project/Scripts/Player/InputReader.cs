@@ -12,10 +12,12 @@ namespace DeadAir.Player
         [SerializeField] private InputActionReference interact;
         [SerializeField] private InputActionReference toggleInventory;
         [SerializeField] private InputActionReference salvage;
+        [SerializeField] private InputActionReference drop;
 
         public event Action InteractPressed;
         public event Action ToggleInventoryPressed;
         public event Action SalvagePressed;
+        public event Action DropPressed;
 
         // Выключается, пока открыт инвентарь: движение, камера и подбор не работают, курсор свободен.
         public bool GameplayEnabled { get; private set; }
@@ -30,10 +32,12 @@ namespace DeadAir.Player
             interact.action.Enable();
             toggleInventory.action.Enable();
             salvage.action.Enable();
+            drop.action.Enable();
 
             interact.action.performed += OnInteract;
             toggleInventory.action.performed += OnToggleInventory;
             salvage.action.performed += OnSalvage;
+            drop.action.performed += OnDrop;
 
             SetGameplayEnabled(true);
         }
@@ -43,6 +47,7 @@ namespace DeadAir.Player
             interact.action.performed -= OnInteract;
             toggleInventory.action.performed -= OnToggleInventory;
             salvage.action.performed -= OnSalvage;
+            drop.action.performed -= OnDrop;
         }
 
         public void SetGameplayEnabled(bool enabled)
@@ -61,5 +66,7 @@ namespace DeadAir.Player
         private void OnToggleInventory(InputAction.CallbackContext _) => ToggleInventoryPressed?.Invoke();
 
         private void OnSalvage(InputAction.CallbackContext _) => SalvagePressed?.Invoke();
+
+        private void OnDrop(InputAction.CallbackContext _) => DropPressed?.Invoke();
     }
 }

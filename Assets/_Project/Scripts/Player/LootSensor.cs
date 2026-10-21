@@ -14,6 +14,8 @@ namespace DeadAir.Player
         [SerializeField] private PlayerInventory playerInventory;
         [SerializeField] private InputReader input;
         [SerializeField] private Camera viewCamera;
+        [Tooltip("Точка на рюкзаке, куда притягиваются подобранные предметы")]
+        [SerializeField] private Transform backpack;
         [SerializeField] private LayerMask lootMask;
         [Tooltip("Что закрывает лут от камеры: предметы за стеной не подсвечиваются")]
         [SerializeField] private LayerMask occluderMask;
@@ -66,7 +68,7 @@ namespace DeadAir.Player
                     continue;
 
                 // Автоподбор не зависит от того, куда смотрит камера.
-                if (item.Item.PickupMode == PickupMode.Auto && DistanceTo(item) <= autoPickupRadius)
+                if (item.PickupMode == PickupMode.Auto && DistanceTo(item) <= autoPickupRadius)
                 {
                     TryAutoPickup(item);
                     if (item.Amount == 0)
@@ -105,7 +107,7 @@ namespace DeadAir.Player
         {
             var result = playerInventory.Inventory.TryAdd(item.Item, item.Amount);
             if (result.Added > 0)
-                item.Take(result.Added);
+                item.Take(result.Added, backpack);
             PickupAttempted?.Invoke(result);
             return result;
         }
@@ -118,7 +120,7 @@ namespace DeadAir.Player
 
             foreach (var item in visibleItems)
             {
-                if (item == null || item.Amount == 0 || item.Item.PickupMode != PickupMode.Manual)
+                if (item == null || item.Amount == 0 || item.PickupMode != PickupMode.Manual)
                     continue;
 
                 float distance = DistanceTo(item);
