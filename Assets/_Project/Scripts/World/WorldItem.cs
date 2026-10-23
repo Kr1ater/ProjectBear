@@ -3,8 +3,6 @@ using UnityEngine;
 
 namespace DeadAir.World
 {
-    // Предмет на земле: ссылка на ассет + количество. Коллайдер — триггер на слое Loot,
-    // чтобы сенсор его видел, а игрок проходил сквозь.
     public sealed class WorldItem : MonoBehaviour
     {
         [SerializeField] private ItemDefinition item;
@@ -13,15 +11,28 @@ namespace DeadAir.World
         [SerializeField] private float markerHeight = 0.2f;
 
         private Collider bounds;
+        
+        private bool autoPickupOnHold;
 
         public ItemDefinition Item => item;
         public int Amount => amount;
+        public bool IsAutoPickupOnHold => autoPickupOnHold;
 
+        public PickupMode PickupMode
+        {
+            get
+            {
+                if (autoPickupOnHold)
+                    return PickupMode.Manual;
+                return item.PickupMode;
+            }
+        }
+        
         public Vector3 MarkerPosition
         {
             get
             {
-                var box = bounds.bounds;
+                Bounds box = bounds.bounds;
                 return new Vector3(box.center.x, box.max.y + markerHeight, box.center.z);
             }
         }
@@ -30,13 +41,41 @@ namespace DeadAir.World
         {
             bounds = GetComponent<Collider>();
         }
-
-        // Забирает часть кучки. Когда ничего не осталось, предмет исчезает из мира.
-        public void Take(int count)
+        
+        public static WorldItem SpawnDropped(ItemDefinition item, int amount, Vector3 position, Quaternion rotation)
         {
-            amount -= Mathf.Clamp(count, 0, amount);
+            GameObject instance = Instantiate(item.WorldPrefab, position, rotation);
+            WorldItem dropped = instance.GetComponent<WorldItem>();
+            dropped.amount = amount;
+            dropped.autoPickupOnHold = true;
+            return dropped;
+        }
+
+        public void ResumeAutoPickup()
+        {
+            autoPickupOnHold = false;
+        }
+
+        // Забирает count единиц из кучки и отправляет их в полёт к рюкзаку.
+        public void Take(int count, Transform collector)
+        {
+            count = Mathf.Clamp(count, 0, amount);
+            if (count == 0)
+                return;
+
+            amount -= count;
+
             if (amount == 0)
-                Destroy(gameObject);
+            {
+                // Забрали всё — к рюкзаку улетает сам предмет.
+                ItemFlight.ToCollector(gameObject, collector);
+            }
+            else
+            {
+                // Забрали часть — улетает копия, а кучка остаётся на месте с меньшим количеством.
+                GameObject copy = Instantiate(gameObject, transform.position, transform.rotation);
+                ItemFlight.ToCollector(copy, collector);
+            }
         }
     }
 }

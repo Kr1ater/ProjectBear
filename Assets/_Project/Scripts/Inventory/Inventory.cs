@@ -4,10 +4,9 @@ using DeadAir.Items;
 
 namespace DeadAir.InventorySystem
 {
-    // Инвентарь, ограниченный условным весом. Чистый C#: ничего не знает о сцене и UI.
     public sealed class Inventory
     {
-        // Допуск на ошибку float: 0.1 + 0.2 != 0.3.
+        // Допуск на ошибку
         private const float WeightEpsilon = 0.0001f;
 
         private readonly List<ItemStack> stacks = new();
@@ -43,8 +42,7 @@ namespace DeadAir.InventorySystem
         }
 
         public bool CanAdd(ItemDefinition item, int amount = 1) => HowManyFit(item) >= amount;
-
-        // Добавляет столько, сколько влезает по весу. Причина отказа — в результате.
+        
         public AddResult TryAdd(ItemDefinition item, int amount)
         {
             if (amount < 1)
@@ -82,9 +80,7 @@ namespace DeadAir.InventorySystem
                 weightAfter += part.Weight;
             return weightAfter <= MaxWeight + WeightEpsilon;
         }
-
-        // Убирает remove и добавляет add одной операцией: либо всё, либо ничего.
-        // OnChanged срабатывает один раз.
+        
         public bool TryExchange(ItemAmount remove, IReadOnlyList<ItemAmount> add)
         {
             if (!CanExchange(remove, add))
@@ -96,8 +92,7 @@ namespace DeadAir.InventorySystem
             Commit();
             return true;
         }
-
-        // Сначала доливаем неполные стопки, остаток кладём новыми стопками по MaxStack.
+        
         private void AddToStacks(ItemDefinition item, int amount)
         {
             for (int i = 0; i < stacks.Count && amount > 0; i++)
@@ -118,8 +113,7 @@ namespace DeadAir.InventorySystem
                 amount -= moved;
             }
         }
-
-        // Забираем с конца, чтобы первыми уходили неполные стопки.
+        
         private void RemoveFromStacks(ItemDefinition item, int amount)
         {
             for (int i = stacks.Count - 1; i >= 0 && amount > 0; i--)
@@ -136,8 +130,7 @@ namespace DeadAir.InventorySystem
                     stacks[i] = stack.WithCount(stack.Count - taken);
             }
         }
-
-        // Вес пересчитываем из стопок, а не копим дельтами, чтобы не накапливать ошибку float.
+        
         private void Commit()
         {
             float total = 0f;

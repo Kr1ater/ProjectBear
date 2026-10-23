@@ -4,15 +4,15 @@ namespace DeadAir.InventorySystem
 {
     public enum AddStatus
     {
-        // Добавлено всё.
+        // Добавлено всё
         Ok,
-        // Добавлена часть, остальное не влезло по весу.
+        // Добавлена часть, остальное не влезло по весу
         Partial,
-        // Не влезла ни одна единица.
+        // Не влезла ни одна единица
         Overweight
     }
 
-    // Итог попытки добавить предмет. Текст сообщения из него собирает UI.
+    // Итог попытки добавить предмет
     public readonly struct AddResult
     {
         public AddResult(ItemDefinition item, int requested, int added, float freeWeight)

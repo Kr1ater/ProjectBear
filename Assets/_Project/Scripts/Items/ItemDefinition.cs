@@ -3,8 +3,6 @@ using UnityEngine;
 
 namespace DeadAir.Items
 {
-    // Описание предмета. Код не знает про конкретные предметы:
-    // новый предмет — это новый ассет, без правок кода.
     [CreateAssetMenu(fileName = "Item", menuName = "Dead Air/Item Definition")]
     public sealed class ItemDefinition : ScriptableObject
     {
@@ -48,50 +46,5 @@ namespace DeadAir.Items
                 return total;
             }
         }
-
-        // Правила данных. Их же проверяет Edit Mode тест по всем ассетам в проекте.
-        public void Validate(List<string> errors)
-        {
-            if (string.IsNullOrWhiteSpace(id))
-                errors.Add("не задан id");
-            if (weight <= 0f)
-                errors.Add("вес должен быть больше 0");
-            if (maxStack < 1)
-                errors.Add("размер стопки должен быть не меньше 1");
-
-            if (category != ItemCategory.Junk)
-            {
-                if (salvageResult.Count > 0)
-                    errors.Add("разбирать можно только хлам, список разборки должен быть пустым");
-                return;
-            }
-
-            if (salvageResult.Count == 0)
-                errors.Add("у хлама должен быть список компонентов разборки");
-
-            foreach (var part in salvageResult)
-            {
-                if (part.Item == null)
-                    errors.Add("в списке разборки пустой предмет");
-                else if (part.Item == this)
-                    errors.Add("предмет не может разбираться сам на себя");
-                if (part.Amount < 1)
-                    errors.Add("количество компонента должно быть не меньше 1");
-            }
-
-            // Разборка всегда освобождает вес — на этом держится правило «всё или ничего».
-            if (SalvageWeight >= weight)
-                errors.Add($"компоненты весят {SalvageWeight:0.##}, это не меньше веса предмета {weight:0.##}");
-        }
-
-#if UNITY_EDITOR
-        private void OnValidate()
-        {
-            var errors = new List<string>();
-            Validate(errors);
-            foreach (var error in errors)
-                Debug.LogWarning($"{name}: {error}", this);
-        }
-#endif
     }
 }

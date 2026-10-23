@@ -2,7 +2,8 @@ using UnityEngine;
 
 namespace DeadAir.Player
 {
-    // Простое движение от третьего лица относительно камеры. Вес инвентаря на скорость не влияет.
+    // Движение героя относительно камеры: W — туда, куда смотрит камера.
+    // Вес инвентаря на скорость не влияет.
     [RequireComponent(typeof(CharacterController))]
     public sealed class PlayerController : MonoBehaviour
     {
@@ -23,22 +24,57 @@ namespace DeadAir.Player
 
         private void Update()
         {
-            Vector2 moveInput = input.Move;
-            Vector3 forward = Vector3.ProjectOnPlane(cameraTransform.forward, Vector3.up).normalized;
-            Vector3 right = Vector3.Cross(Vector3.up, forward);
-            Vector3 direction = Vector3.ClampMagnitude(forward * moveInput.y + right * moveInput.x, 1f);
+            Vector3 moveDirection = GetMoveDirection();
 
-            if (direction.sqrMagnitude > 0.0001f)
-            {
-                var targetRotation = Quaternion.LookRotation(direction);
-                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, turnSpeed * Time.deltaTime);
-            }
+            if (moveDirection != Vector3.zero)
+                TurnTowards(moveDirection);
 
-            // Небольшая постоянная скорость вниз держит контроллер прижатым к земле.
-            verticalSpeed = controller.isGrounded ? -2f : verticalSpeed + gravity * Time.deltaTime;
+            ApplyGravity();
 
-            Vector3 velocity = direction * moveSpeed + Vector3.up * verticalSpeed;
+            Vector3 velocity = moveDirection * moveSpeed;
+            velocity.y = verticalSpeed;
             controller.Move(velocity * Time.deltaTime);
+        }
+
+        // Переводит нажатые WASD в направление в мире относительно камеры.
+        private Vector3 GetMoveDirection()
+        {
+            Vector2 keys = input.Move;
+
+            // «Вперёд» камеры без наклона вверх-вниз, чтобы герой не пытался идти в землю или в небо.
+            Vector3 cameraForward = cameraTransform.forward;
+            cameraForward.y = 0f;
+            cameraForward.Normalize();
+            Vector3 cameraRight = cameraTransform.right;
+            cameraRight.y = 0f;
+            cameraRight.Normalize();
+
+            Vector3 direction = cameraForward * keys.y + cameraRight * keys.x;
+
+            // По диагонали (W + D) вектор длиннее 1 — ограничиваем, чтобы герой не ходил быстрее.
+            return Vector3.ClampMagnitude(direction, 1f);
+        }
+
+        // Плавно поворачивает героя лицом к направлению движения.
+        private void TurnTowards(Vector3 direction)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(direction);
+            float maxTurnThisFrame = turnSpeed * Time.deltaTime;
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, maxTurnThisFrame);
+        }
+
+        private void ApplyGravity()
+        {
+            if (controller.isGrounded)
+            {
+                // На земле держим небольшую скорость вниз: так контроллер не «отлипает» от земли на неровностях.
+                verticalSpeed = -2f;
+            }
+            else
+            {
+                // В воздухе скорость падения растёт каждый кадр.
+                verticalSpeed += gravity * Time.deltaTime;
+            }
         }
     }
 }

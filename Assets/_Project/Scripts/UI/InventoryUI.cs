@@ -7,11 +7,13 @@ using UnityEngine;
 
 namespace DeadAir.UI
 {
-    // Экран инвентаря: список стопок, фильтр по категориям, детали и разборка.
-    // Данные не меняет сам — только через Inventory и SalvageService.
+    // Экран инвентаря: список стопок, вкладки по категориям, детали, разборка и выброс.
+    // Данные сам не меняет — только через Inventory, SalvageService и ItemDropper.
+    // Перерисовывается по событию Inventory.OnChanged, то есть после любого изменения инвентаря.
     public sealed class InventoryUI : MonoBehaviour
     {
         [SerializeField] private PlayerInventory playerInventory;
+        [SerializeField] private ItemDropper dropper;
         [SerializeField] private InputReader input;
         [SerializeField] private MessageFeed messages;
 
@@ -19,13 +21,14 @@ namespace DeadAir.UI
         [SerializeField] private GameObject screen;
         [SerializeField] private WeightBar weightBar;
         [SerializeField] private CategoryTab[] tabs;
-        [SerializeField] private InventoryRow rowPrefab;
-        [SerializeField] private RectTransform rowContainer;
+        [Tooltip("Готовые строки списка на сцене. Сколько их, столько стопок помещается в список")]
+        [SerializeField] private InventoryRow[] rows;
         [SerializeField] private TMP_Text emptyText;
         [SerializeField] private ItemDetailsPanel details;
 
-        private readonly List<InventoryRow> rows = new();
+        // Стопки, которые проходят фильтр текущей вкладки.
         private readonly List<ItemStack> visibleStacks = new();
+
         private CategoryTab activeTab;
         private ItemDefinition selected;
         private int selectedIndex;
@@ -36,12 +39,11 @@ namespace DeadAir.UI
 
         private void Awake()
         {
-            foreach (var tab in tabs)
-            {
-                var captured = tab;
-                tab.Button.onClick.AddListener(() => SelectTab(captured));
-            }
+            foreach (CategoryTab tab in tabs)
+                tab.Button.onClick.AddListener(() => SelectTab(tab));
+
             details.SalvageButton.onClick.AddListener(SalvageSelected);
+            details.DropButton.onClick.AddListener(DropSelected);
 
             activeTab = tabs[0];
             screen.SetActive(false);
@@ -51,6 +53,7 @@ namespace DeadAir.UI
         {
             input.ToggleInventoryPressed += Toggle;
             input.SalvagePressed += SalvageSelected;
+            input.DropPressed += DropSelected;
             Inventory.OnChanged += Refresh;
         }
 
@@ -58,15 +61,22 @@ namespace DeadAir.UI
         {
             input.ToggleInventoryPressed -= Toggle;
             input.SalvagePressed -= SalvageSelected;
+            input.DropPressed -= DropSelected;
             Inventory.OnChanged -= Refresh;
         }
 
-        public void Toggle() => SetOpen(!IsOpen);
+        public void Toggle()
+        {
+            SetOpen(!IsOpen);
+        }
 
         public void SetOpen(bool open)
         {
             screen.SetActive(open);
+
+            // Пока инвентарь открыт, герой стоит, камера не крутится, курсор свободен.
             input.SetGameplayEnabled(!open);
+
             if (open)
                 Refresh();
         }
@@ -85,59 +95,128 @@ namespace DeadAir.UI
             Refresh();
         }
 
+        // X или кнопка «Разобрать».
         private void SalvageSelected()
         {
             if (!IsOpen || selected == null || !selected.IsSalvageable)
                 return;
 
-            var result = playerInventory.Salvage.Salvage(selected);
+            SalvageResult result = playerInventory.Salvage.Salvage(selected);
             bool failed = result.Status != SalvageStatus.Ok;
-            messages.Show(UiText.SalvageResult(result), attention: failed);
+            messages.Show(UiText.SalvageResult(result), failed);
+
             if (failed)
                 weightBar.Flash();
         }
 
+        // G или кнопка «Выбросить»: выбрасывает одну единицу выбранного предмета.
+        private void DropSelected()
+        {
+            if (!IsOpen || selected == null)
+                return;
+
+            ItemDefinition item = selected;
+            bool dropped = dropper.Drop(item);
+            if (dropped)
+                messages.Show(UiText.Dropped(item, 1));
+        }
+
         private void Refresh()
         {
+            // Закрытый экран не перерисовываем: при открытии SetOpen сам вызовет Refresh.
             if (!IsOpen)
                 return;
 
-            foreach (var tab in tabs)
-                tab.SetSelected(tab == activeTab);
-
-            visibleStacks.Clear();
-            foreach (var stack in Inventory.Stacks)
-                if (activeTab.Matches(stack.Item))
-                    visibleStacks.Add(stack);
-
-            // Выбранный предмет пропал (разобран последний) — выбираем строку, что встала на его место:
-            // так хлам можно разбирать подряд, не возвращаясь мышью к списку.
-            int index = visibleStacks.FindIndex(stack => stack.Item == selected);
-            if (index < 0)
-            {
-                index = Mathf.Min(selectedIndex, visibleStacks.Count - 1);
-                selected = index >= 0 ? visibleStacks[index].Item : null;
-            }
-            selectedIndex = Mathf.Max(index, 0);
-
-            for (int i = 0; i < visibleStacks.Count; i++)
-                GetRow(i).Bind(visibleStacks[i], visibleStacks[i].Item == selected, SelectItem);
-            for (int i = visibleStacks.Count; i < rows.Count; i++)
-                rows[i].gameObject.SetActive(false);
-
-            emptyText.gameObject.SetActive(visibleStacks.Count == 0);
-            int count = selected != null ? Inventory.CountOf(selected) : 0;
-            details.Show(selected, count, playerInventory.Salvage.Check(selected) == SalvageStatus.Ok);
+            HighlightActiveTab();
+            CollectVisibleStacks();
+            KeepSelectionValid();
+            DrawRows();
+            DrawDetails();
         }
 
-        private InventoryRow GetRow(int index)
+        private void HighlightActiveTab()
         {
-            if (index == rows.Count)
-                rows.Add(Instantiate(rowPrefab, rowContainer));
+            foreach (CategoryTab tab in tabs)
+                tab.SetSelected(tab == activeTab);
+        }
 
-            var row = rows[index];
-            row.gameObject.SetActive(true);
-            return row;
+        private void CollectVisibleStacks()
+        {
+            visibleStacks.Clear();
+            foreach (ItemStack stack in Inventory.Stacks)
+            {
+                if (activeTab.Matches(stack.Item))
+                    visibleStacks.Add(stack);
+            }
+        }
+
+        // Следит, чтобы выбранный предмет был в списке.
+        private void KeepSelectionValid()
+        {
+            int index = FindVisibleIndex(selected);
+            if (index >= 0)
+            {
+                selectedIndex = index;
+                return;
+            }
+
+            // Выбранного предмета больше нет: разобран, выброшен или скрыт вкладкой.
+            if (visibleStacks.Count == 0)
+            {
+                selected = null;
+                selectedIndex = 0;
+                return;
+            }
+
+            // Выбираем строку, которая встала на его место. Так хлам можно разбирать подряд одной клавишей X.
+            if (selectedIndex > visibleStacks.Count - 1)
+                selectedIndex = visibleStacks.Count - 1;
+            selected = visibleStacks[selectedIndex].Item;
+        }
+
+        private int FindVisibleIndex(ItemDefinition item)
+        {
+            for (int i = 0; i < visibleStacks.Count; i++)
+            {
+                if (visibleStacks[i].Item == item)
+                    return i;
+            }
+            return -1;
+        }
+
+        // Заполняет готовые строки на сцене: по строке на стопку, лишние строки выключает.
+        // Если стопок больше, чем строк, в списке показываются первые rows.Length стопок.
+        private void DrawRows()
+        {
+            for (int i = 0; i < rows.Length; i++)
+            {
+                InventoryRow row = rows[i];
+                if (i < visibleStacks.Count)
+                {
+                    // Сначала включаем: выключенная строка ещё не получила Awake и не подписалась на клик.
+                    row.gameObject.SetActive(true);
+                    ItemStack stack = visibleStacks[i];
+                    bool isSelected = stack.Item == selected;
+                    row.Bind(stack, isSelected, SelectItem);
+                }
+                else
+                {
+                    row.gameObject.SetActive(false);
+                }
+            }
+
+            emptyText.gameObject.SetActive(visibleStacks.Count == 0);
+        }
+
+        private void DrawDetails()
+        {
+            int count = 0;
+            if (selected != null)
+                count = Inventory.CountOf(selected);
+
+            bool canSalvage = playerInventory.Salvage.Check(selected) == SalvageStatus.Ok;
+            bool canDrop = dropper.CanDrop(selected);
+            details.Show(selected, count, canSalvage, canDrop);
         }
     }
 }

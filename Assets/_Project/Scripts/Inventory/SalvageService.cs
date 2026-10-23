@@ -23,11 +23,10 @@ namespace DeadAir.InventorySystem
         public ItemDefinition Item { get; }
         public IReadOnlyList<ItemAmount> Components => Item.SalvageResult;
     }
-
-    // Разборка хлама: одна единица за раз, всё или ничего.
+    
     public sealed class SalvageService
     {
-        private readonly Inventory inventory;
+        private readonly Inventory inventory; 
 
         public SalvageService(Inventory inventory)
         {
@@ -40,7 +39,6 @@ namespace DeadAir.InventorySystem
                 return SalvageStatus.NotSalvageable;
             if (inventory.CountOf(item) < 1)
                 return SalvageStatus.NotInInventory;
-            // С валидными данными не случается: компоненты всегда легче хлама.
             if (!inventory.CanExchange(new ItemAmount(item, 1), item.SalvageResult))
                 return SalvageStatus.Overweight;
             return SalvageStatus.Ok;
