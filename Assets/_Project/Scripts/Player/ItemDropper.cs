@@ -4,7 +4,6 @@ using UnityEngine;
 
 namespace DeadAir.Player
 {
-    // Выброс предмета из инвентаря: убирает одну единицу и кладёт её модель на землю перед игроком.
     public sealed class ItemDropper : MonoBehaviour
     {
         [SerializeField] private PlayerInventory playerInventory;
@@ -16,23 +15,51 @@ namespace DeadAir.Player
         [Tooltip("Случайный разброс точки падения, чтобы предметы не ложились друг в друга, м")]
         [SerializeField] private float scatter = 0.35f;
 
-        public bool CanDrop(ItemDefinition item) =>
-            item != null && item.WorldPrefab != null && playerInventory.Inventory.CountOf(item) > 0;
+        public bool CanDrop(ItemDefinition item)
+        {
+            if (item == null)
+                return false;
+            
+            if (item.WorldPrefab == null)
+                return false;
+            
+            return playerInventory.Inventory.CountOf(item) > 0;
+        }
 
         public bool Drop(ItemDefinition item)
         {
-            if (!CanDrop(item) || !playerInventory.Inventory.Remove(item, 1))
+            if (!CanDrop(item))
                 return false;
 
-            Vector2 offset = Random.insideUnitCircle * scatter;
-            Vector3 spot = transform.position + transform.forward * dropDistance + transform.right * offset.x + transform.forward * offset.y;
-            if (Physics.Raycast(spot + Vector3.up * 2f, Vector3.down, out var hit, 4f, groundMask, QueryTriggerInteraction.Ignore))
-                spot = hit.point;
+            bool removed = playerInventory.Inventory.Remove(item, 1);
+            if (!removed)
+                return false;
 
-            var rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
-            var dropped = WorldItem.SpawnDropped(item, 1, spot, rotation);
-            ItemFlight.Drop(dropped.gameObject, backpack.position, spot);
+            Vector3 dropPoint = FindDropPoint();
+            Quaternion randomTurn = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+
+            WorldItem dropped = WorldItem.SpawnDropped(item, 1, dropPoint, randomTurn);
+            ItemFlight.Drop(dropped.gameObject, backpack.position, dropPoint);
             return true;
+        }
+
+        private Vector3 FindDropPoint()
+        {
+            // Точка перед игроком.
+            Vector3 point = transform.position + transform.forward * dropDistance;
+
+            // Небольшой случайный сдвиг чтобы предметы не ложились в одну точку.
+            Vector2 randomShift = Random.insideUnitCircle * scatter;
+            point += transform.right * randomShift.x;
+            point += transform.forward * randomShift.y;
+
+            // Луч сверху вниз находит поверхность под точкой: грунт, камень или ящик.
+            Vector3 rayStart = point + Vector3.up * 2f;
+            bool hitGround = Physics.Raycast(rayStart, Vector3.down, out RaycastHit hit, 4f, groundMask, QueryTriggerInteraction.Ignore);
+            if (hitGround)
+                point = hit.point;
+
+            return point;
         }
     }
 }

@@ -1,62 +1,121 @@
-using System;
+using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using DeadAir.InventorySystem;
 using DeadAir.Items;
+using UnityEngine;
 
 namespace DeadAir.UI
 {
-    // Все тексты интерфейса, которые собираются из данных. Логика инвентаря строк не знает.
+    // Все тексты интерфейса, которые собираются из данных. Логика инвентаря строк не знает:
+    // она возвращает статусы и числа, а здесь из них получаются сообщения.
     public static class UiText
     {
-        public static string Weight(float weight) => weight.ToString("0.0", CultureInfo.InvariantCulture);
-
-        // Свободное место округляем вниз, чтобы не обещать больше, чем есть.
-        public static string FreeWeight(float weight) => Weight((float)Math.Floor(weight * 10f + 0.001f) / 10f);
-
-        public static string Category(ItemCategory category) => category switch
+        // Вес с одним знаком после точки: 2.6, 15.0.
+        // InvariantCulture — чтобы разделителем всегда была точка, даже на русской системе.
+        public static string Weight(float weight)
         {
-            ItemCategory.Consumable => "Расходник",
-            ItemCategory.RepairResource => "Ресурс для ремонта",
-            ItemCategory.Junk => "Хлам",
-            ItemCategory.Weapon => "Оружие",
-            _ => category.ToString()
-        };
+            return weight.ToString("0.0", CultureInfo.InvariantCulture);
+        }
 
-        public static string CategoryTab(ItemCategory category) => category switch
+        // Свободное место округляем вниз до десятых, чтобы не обещать больше, чем есть.
+        // Добавка 0.001 компенсирует неточность float: 2.4 может храниться как 2.39999.
+        public static string FreeWeight(float weight)
         {
-            ItemCategory.Consumable => "Расходники",
-            ItemCategory.RepairResource => "Ремонт",
-            ItemCategory.Junk => "Хлам",
-            ItemCategory.Weapon => "Оружие",
-            _ => category.ToString()
-        };
+            float tenths = Mathf.Floor(weight * 10f + 0.001f);
+            return Weight(tenths / 10f);
+        }
 
-        public static string Pickup(PickupMode mode) => mode switch
+        // Красит часть текста. TextMeshPro понимает теги вида <color=#EBA138>текст</color>.
+        public static string Colored(string text, Color color)
         {
-            PickupMode.Auto => "автоматически",
-            PickupMode.Manual => "по клавише E",
-            _ => mode.ToString()
-        };
+            string hex = ColorUtility.ToHtmlStringRGB(color);
+            return "<color=#" + hex + ">" + text + "</color>";
+        }
 
-        public static string PickupResult(AddResult result) => result.Status switch
+        public static string Category(ItemCategory category)
         {
-            AddStatus.Ok => $"+{result.Added} {result.Item.DisplayName}",
-            AddStatus.Partial => $"+{result.Added} {result.Item.DisplayName} (не хватает места для {result.Rejected})",
-            _ => $"Перегруз: {result.Item.DisplayName} — нужно {Weight(result.RequiredWeight)}, свободно {FreeWeight(result.FreeWeight)}"
-        };
+            switch (category)
+            {
+                case ItemCategory.Consumable: return "Расходник";
+                case ItemCategory.RepairResource: return "Ресурс для ремонта";
+                case ItemCategory.Junk: return "Хлам";
+                case ItemCategory.Weapon: return "Оружие";
+                default: return category.ToString();
+            }
+        }
 
-        public static string SalvageResult(SalvageResult result) => result.Status switch
+        public static string Pickup(PickupMode mode)
         {
-            SalvageStatus.Ok => $"Разобрано: {result.Item.DisplayName} → {Components(result.Item)}",
-            SalvageStatus.NotSalvageable => $"{result.Item.DisplayName}: разбирать нечего",
-            SalvageStatus.NotInInventory => $"{result.Item.DisplayName}: нет в инвентаре",
-            _ => $"{result.Item.DisplayName}: компоненты не поместятся по весу"
-        };
+            switch (mode)
+            {
+                case PickupMode.Auto: return "автоматически";
+                case PickupMode.Manual: return "по клавише E";
+                default: return mode.ToString();
+            }
+        }
 
-        public static string Dropped(ItemDefinition item, int amount) => $"−{amount} {item.DisplayName}";
+        // «+5 Болты», «+6 Болты (не хватает места для 4)», «Перегруз: Карабин — нужно 6.0, свободно 2.4».
+        public static string PickupResult(AddResult result)
+        {
+            string name = result.Item.DisplayName;
+            switch (result.Status)
+            {
+                case AddStatus.Ok:
+                    return "+" + result.Added + " " + name;
+                case AddStatus.Partial:
+                    return "+" + result.Added + " " + name + " (не хватает места для " + result.Rejected + ")";
+                default:
+                    return "Перегруз: " + name + " — нужно " + Weight(result.RequiredWeight) +
+                           ", свободно " + FreeWeight(result.FreeWeight);
+            }
+        }
 
-        public static string Components(ItemDefinition item) =>
-            string.Join(", ", item.SalvageResult.Select(part => $"{part.Amount} {part.Item.DisplayName}"));
+        // «Разобрано: Старая рация → 2 Проводка, 1 Микросхема, 2 Болты» или причина отказа.
+        public static string SalvageResult(SalvageResult result)
+        {
+            string name = result.Item.DisplayName;
+            switch (result.Status)
+            {
+                case SalvageStatus.Ok:
+                    return "Разобрано: " + name + " → " + Components(result.Item);
+                case SalvageStatus.NotSalvageable:
+                    return name + ": разбирать нечего";
+                case SalvageStatus.NotInInventory:
+                    return name + ": нет в инвентаре";
+                default:
+                    return name + ": компоненты не поместятся по весу";
+            }
+        }
+
+        // «−1 Старая рация»
+        public static string Dropped(ItemDefinition item, int amount)
+        {
+            return "−" + amount + " " + item.DisplayName;
+        }
+
+        // «2 Проводка, 1 Микросхема, 2 Болты»
+        public static string Components(ItemDefinition item)
+        {
+            var parts = new List<string>();
+            foreach (ItemAmount part in item.SalvageResult)
+                parts.Add(part.Amount + " " + part.Item.DisplayName);
+            return string.Join(", ", parts);
+        }
+
+        // Строка компонента в панели деталей: «2 × Проводка  0.6», вес серым.
+        public static string ComponentLine(ItemAmount part)
+        {
+            return part.Amount + " × " + part.Item.DisplayName + "  " + Colored(Weight(part.Weight), UiPalette.Muted);
+        }
+
+        // Подпись над предметом в фокусе: «[E] Подобрать: Болты ×5  0.5».
+        public static string PickupHint(ItemDefinition item, int amount)
+        {
+            string text = Colored("[E]", UiPalette.Amber) + " Подобрать: " + item.DisplayName;
+            if (amount > 1)
+                text += " ×" + amount;
+            text += "  " + Colored(Weight(item.Weight * amount), UiPalette.Muted);
+            return text;
+        }
     }
 }

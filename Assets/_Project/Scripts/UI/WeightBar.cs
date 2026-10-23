@@ -6,6 +6,7 @@ using UnityEngine.UI;
 namespace DeadAir.UI
 {
     // Шкала веса «12.6 / 15.0». При отказе по весу коротко вспыхивает янтарным.
+    // На сцене их две: компактная в HUD и в шапке инвентаря.
     public sealed class WeightBar : MonoBehaviour
     {
         [SerializeField] private PlayerInventory playerInventory;
@@ -15,6 +16,7 @@ namespace DeadAir.UI
         [SerializeField] private TMP_Text label;
         [SerializeField] private float flashDuration = 0.8f;
 
+        // Когда началась последняя вспышка. Минус бесконечность — вспышек ещё не было.
         private float flashStartedAt = float.NegativeInfinity;
 
         private void OnEnable()
@@ -35,18 +37,29 @@ namespace DeadAir.UI
 
         private void Refresh()
         {
-            var inventory = playerInventory.Inventory;
-            fill.anchorMax = new Vector2(Mathf.Clamp01(inventory.CurrentWeight / inventory.MaxWeight), 1f);
-            label.text = $"{UiText.Weight(inventory.CurrentWeight)} / {UiText.Weight(inventory.MaxWeight)}";
+            float current = playerInventory.Inventory.CurrentWeight;
+            float max = playerInventory.Inventory.MaxWeight;
+
+            // Правый край заполнения: 0 — пустая шкала, 1 — полная.
+            float filledPart = Mathf.Clamp01(current / max);
+            fill.anchorMax = new Vector2(filledPart, 1f);
+
+            label.text = UiText.Weight(current) + " / " + UiText.Weight(max);
         }
 
         private void Update()
         {
-            // Два коротких импульса, затухающих к обычному цвету.
-            float t = (Time.unscaledTime - flashStartedAt) / flashDuration;
-            float pulse = t < 1f ? Mathf.Abs(Mathf.Sin(t * Mathf.PI * 2f)) * (1f - t) : 0f;
-            fillGraphic.color = Color.Lerp(UiPalette.Text, UiPalette.Amber, Mathf.Clamp01(pulse * 2f));
-            label.color = Color.Lerp(UiPalette.Text, UiPalette.Amber, Mathf.Clamp01(pulse * 2f));
+            // В момент вспышки цвет янтарный и за flashDuration секунд плавно возвращается к обычному.
+            Color color = UiPalette.Text;
+            float timeSinceFlash = Time.unscaledTime - flashStartedAt;
+            if (timeSinceFlash < flashDuration)
+            {
+                float progress = timeSinceFlash / flashDuration;
+                color = Color.Lerp(UiPalette.Amber, UiPalette.Text, progress);
+            }
+
+            fillGraphic.color = color;
+            label.color = color;
         }
     }
 }

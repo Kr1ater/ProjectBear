@@ -2,7 +2,6 @@ using DeadAir.Items;
 
 namespace DeadAir.InventorySystem
 {
-    // Запись в инвентаре. Неизменяемая: снаружи стопку не поменять, только через Inventory.
     public readonly struct ItemStack
     {
         public ItemStack(ItemDefinition item, int count)

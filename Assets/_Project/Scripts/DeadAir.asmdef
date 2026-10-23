@@ -2,6 +2,7 @@
     "name": "DeadAir",
     "rootNamespace": "DeadAir",
     "references": [
+        "Unity.Cinemachine",
         "Unity.InputSystem",
         "Unity.TextMeshPro",
         "UnityEngine.UI"

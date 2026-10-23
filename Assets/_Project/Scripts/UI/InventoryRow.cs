@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 namespace DeadAir.UI
 {
-    // Строка списка: иконка, название, количество, вес строки.
+    // Одна строка списка инвентаря: иконка, название, количество, вес строки.
     public sealed class InventoryRow : MonoBehaviour
     {
         [SerializeField] private Button button;
@@ -19,13 +19,16 @@ namespace DeadAir.UI
         [SerializeField] private TMP_Text weightText;
 
         private ItemDefinition item;
+
+        // Что вызвать при клике. Передаёт InventoryUI, чтобы строка сама не решала, что делать.
         private Action<ItemDefinition> clicked;
 
         private void Awake()
         {
-            button.onClick.AddListener(() => clicked?.Invoke(item));
+            button.onClick.AddListener(OnButtonClicked);
         }
 
+        // Заполняет строку данными стопки. Строки переиспользуются, поэтому вызывается при каждой перерисовке.
         public void Bind(ItemStack stack, bool selected, Action<ItemDefinition> onClick)
         {
             item = stack.Item;
@@ -34,12 +37,27 @@ namespace DeadAir.UI
             icon.sprite = item.Icon;
             icon.enabled = item.Icon != null;
             nameText.text = item.DisplayName;
-            countText.text = stack.Count > 1 ? $"×{stack.Count}" : string.Empty;
             weightText.text = UiText.Weight(stack.Weight);
 
-            // Непрозрачный цвет: полупрозрачный белый в линейном цветовом пространстве выходит слишком ярким.
-            background.color = selected ? UiPalette.PanelRaised : Color.clear;
+            // Количество показываем, только если предметов больше одного.
+            if (stack.Count > 1)
+                countText.text = "×" + stack.Count;
+            else
+                countText.text = "";
+
+            // Выбранная строка чуть светлее фона и с янтарной полоской слева.
+            // Цвет непрозрачный: полупрозрачный белый в линейном цветовом пространстве Unity выходит слишком ярким.
+            if (selected)
+                background.color = UiPalette.PanelRaised;
+            else
+                background.color = Color.clear;
             selectionMark.enabled = selected;
+        }
+
+        private void OnButtonClicked()
+        {
+            if (clicked != null)
+                clicked(item);
         }
     }
 }

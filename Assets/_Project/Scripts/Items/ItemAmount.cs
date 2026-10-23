@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace DeadAir.Items
 {
-    // Предмет + количество: компонент разборки, содержимое кучки лута.
+    // Предмет + количество: компонент разборки
     [Serializable]
     public struct ItemAmount
     {

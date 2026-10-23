@@ -4,54 +4,96 @@ using UnityEngine;
 
 namespace DeadAir.UI
 {
-    // Лента коротких сообщений в углу экрана: подбор, перегруз, разборка.
-    // Новые строки снизу, старые гаснут сами. Строки берутся из пула.
+    // Лента коротких сообщений в углу экрана: подбор, перегруз, разборка, выброс.
+    // Строки заранее лежат на сцене выключенными. Скрипт ничего не создаёт: включает свободную строку,
+    // пишет в неё текст, а когда она погасла — выключает. Новые строки появляются снизу.
     public sealed class MessageFeed : MonoBehaviour
     {
-        [SerializeField] private TMP_Text linePrefab;
-        [SerializeField] private RectTransform container;
-        [SerializeField, Min(1)] private int maxLines = 4;
+        [Tooltip("Готовые строки ленты на сцене. Сколько их, столько сообщений видно одновременно")]
+        [SerializeField] private TMP_Text[] lines;
         [SerializeField] private float lifetime = 3.5f;
         [SerializeField] private float fadeDuration = 0.6f;
 
-        private readonly List<(TMP_Text text, float shownAt)> active = new();
-        private readonly Stack<TMP_Text> pool = new();
+        // Строка на экране и время, когда она появилась.
+        private class Line
+        {
+            public TMP_Text Text;
+            public float ShownAt;
+        }
 
+        // Видимые строки от самой старой к самой новой.
+        private readonly List<Line> visibleLines = new();
+
+        private void Awake()
+        {
+            foreach (TMP_Text line in lines)
+                line.gameObject.SetActive(false);
+        }
+
+        // attention = true — сообщение янтарным цветом (перегруз, частичный подбор, ошибка разборки).
         public void Show(string message, bool attention = false)
         {
-            if (active.Count >= maxLines)
-                Recycle(0);
+            TMP_Text text = FindHiddenLine();
 
-            var line = pool.Count > 0 ? pool.Pop() : Instantiate(linePrefab, container);
-            line.text = message;
-            line.color = attention ? UiPalette.Amber : UiPalette.Text;
-            line.transform.SetAsLastSibling();
-            line.gameObject.SetActive(true);
-            active.Add((line, Time.unscaledTime));
+            // Все строки заняты — убираем самую старую и пишем в неё.
+            if (text == null)
+            {
+                text = visibleLines[0].Text;
+                HideLine(0);
+            }
+
+            text.text = message;
+            text.alpha = 1f;
+            if (attention)
+                text.color = UiPalette.Amber;
+            else
+                text.color = UiPalette.Text;
+
+            // Последний ребёнок контейнера рисуется в самом низу ленты.
+            text.transform.SetAsLastSibling();
+            text.gameObject.SetActive(true);
+
+            Line line = new Line();
+            line.Text = text;
+            line.ShownAt = Time.unscaledTime;
+            visibleLines.Add(line);
         }
 
         private void Update()
         {
-            float now = Time.unscaledTime;
-            for (int i = active.Count - 1; i >= 0; i--)
+            // Идём с конца списка, потому что внутри цикла можем убирать строки.
+            for (int i = visibleLines.Count - 1; i >= 0; i--)
             {
-                var (text, shownAt) = active[i];
-                float age = now - shownAt;
+                Line line = visibleLines[i];
+                float age = Time.unscaledTime - line.ShownAt;
+
                 if (age >= lifetime)
                 {
-                    Recycle(i);
+                    HideLine(i);
                     continue;
                 }
-                text.alpha = 1f - Mathf.InverseLerp(lifetime - fadeDuration, lifetime, age);
+
+                // Последние fadeDuration секунд жизни строка плавно гаснет от 1 до 0.
+                float fadeStart = lifetime - fadeDuration;
+                if (age > fadeStart)
+                    line.Text.alpha = 1f - (age - fadeStart) / fadeDuration;
             }
         }
 
-        private void Recycle(int index)
+        private TMP_Text FindHiddenLine()
         {
-            var text = active[index].text;
-            active.RemoveAt(index);
-            text.gameObject.SetActive(false);
-            pool.Push(text);
+            foreach (TMP_Text line in lines)
+            {
+                if (!line.gameObject.activeSelf)
+                    return line;
+            }
+            return null;
+        }
+
+        private void HideLine(int index)
+        {
+            visibleLines[index].Text.gameObject.SetActive(false);
+            visibleLines.RemoveAt(index);
         }
     }
 }

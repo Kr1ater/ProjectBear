@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace DeadAir.UI
 {
-    // Вкладка-фильтр списка: «Все» или одна категория.
+    // Вкладка-фильтр над списком инвентаря: «Все» или одна категория.
     public sealed class CategoryTab : MonoBehaviour
     {
         [SerializeField] private bool showAll;
@@ -16,11 +16,22 @@ namespace DeadAir.UI
 
         public Button Button => button;
 
-        public bool Matches(ItemDefinition item) => showAll || item.Category == category;
+        // Показывать ли этот предмет, когда выбрана эта вкладка.
+        public bool Matches(ItemDefinition item)
+        {
+            if (showAll)
+                return true;
+            return item.Category == category;
+        }
 
         public void SetSelected(bool selected)
         {
-            label.color = selected ? UiPalette.Text : UiPalette.Muted;
+            if (selected)
+                label.color = UiPalette.Text;
+            else
+                label.color = UiPalette.Muted;
+
+            // Янтарная черта под выбранной вкладкой.
             underline.enabled = selected;
         }
     }

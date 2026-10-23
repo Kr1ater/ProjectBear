@@ -3,8 +3,6 @@ using UnityEngine;
 
 namespace DeadAir.World
 {
-    // Предмет на земле: ссылка на ассет + количество. Коллайдер — триггер на слое Loot,
-    // чтобы сенсор его видел, а игрок проходил сквозь.
     public sealed class WorldItem : MonoBehaviour
     {
         [SerializeField] private ItemDefinition item;
@@ -13,19 +11,28 @@ namespace DeadAir.World
         [SerializeField] private float markerHeight = 0.2f;
 
         private Collider bounds;
-        private bool droppedByPlayer;
+        
+        private bool autoPickupOnHold;
 
         public ItemDefinition Item => item;
         public int Amount => amount;
+        public bool IsAutoPickupOnHold => autoPickupOnHold;
 
-        // Выброшенное игроком подбирается только по клавише: иначе вернулось бы в инвентарь с первым же шагом.
-        public PickupMode PickupMode => droppedByPlayer ? PickupMode.Manual : item.PickupMode;
-
+        public PickupMode PickupMode
+        {
+            get
+            {
+                if (autoPickupOnHold)
+                    return PickupMode.Manual;
+                return item.PickupMode;
+            }
+        }
+        
         public Vector3 MarkerPosition
         {
             get
             {
-                var box = bounds.bounds;
+                Bounds box = bounds.bounds;
                 return new Vector3(box.center.x, box.max.y + markerHeight, box.center.z);
             }
         }
@@ -34,18 +41,22 @@ namespace DeadAir.World
         {
             bounds = GetComponent<Collider>();
         }
-
-        // Кладёт в мир модель предмета из его ассета. Используется при выбросе из инвентаря.
+        
         public static WorldItem SpawnDropped(ItemDefinition item, int amount, Vector3 position, Quaternion rotation)
         {
-            var spawned = Instantiate(item.WorldPrefab, position, rotation).GetComponent<WorldItem>();
-            spawned.amount = amount;
-            spawned.droppedByPlayer = true;
-            return spawned;
+            GameObject instance = Instantiate(item.WorldPrefab, position, rotation);
+            WorldItem dropped = instance.GetComponent<WorldItem>();
+            dropped.amount = amount;
+            dropped.autoPickupOnHold = true;
+            return dropped;
         }
 
-        // Забирает часть кучки и отправляет её в полёт к рюкзаку. Если забрано всё, улетает сам объект,
-        // иначе — его копия, а кучка остаётся с меньшим количеством.
+        public void ResumeAutoPickup()
+        {
+            autoPickupOnHold = false;
+        }
+
+        // Забирает count единиц из кучки и отправляет их в полёт к рюкзаку.
         public void Take(int count, Transform collector)
         {
             count = Mathf.Clamp(count, 0, amount);
@@ -53,8 +64,18 @@ namespace DeadAir.World
                 return;
 
             amount -= count;
-            var flying = amount == 0 ? gameObject : Instantiate(gameObject, transform.position, transform.rotation);
-            ItemFlight.ToCollector(flying, collector);
+
+            if (amount == 0)
+            {
+                // Забрали всё — к рюкзаку улетает сам предмет.
+                ItemFlight.ToCollector(gameObject, collector);
+            }
+            else
+            {
+                // Забрали часть — улетает копия, а кучка остаётся на месте с меньшим количеством.
+                GameObject copy = Instantiate(gameObject, transform.position, transform.rotation);
+                ItemFlight.ToCollector(copy, collector);
+            }
         }
     }
 }

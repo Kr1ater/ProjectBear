@@ -4,69 +4,118 @@ using UnityEngine.InputSystem;
 
 namespace DeadAir.Player
 {
-    // Единственное место, которое знает про Input System. Остальные читают значения и события отсюда.
     public sealed class InputReader : MonoBehaviour
     {
-        [SerializeField] private InputActionReference move;
-        [SerializeField] private InputActionReference look;
-        [SerializeField] private InputActionReference interact;
-        [SerializeField] private InputActionReference toggleInventory;
-        [SerializeField] private InputActionReference salvage;
-        [SerializeField] private InputActionReference drop;
+        private const float MousePixelsToAxis = 0.1f;
+
+        [Header("Клавиши")]
+        [SerializeField] private KeyCode interactKey = KeyCode.E;
+        [SerializeField] private KeyCode toggleInventoryKey = KeyCode.Tab;
+        [SerializeField] private KeyCode salvageKey = KeyCode.X;
+        [SerializeField] private KeyCode dropKey = KeyCode.G;
+        [Tooltip("Та же клавиша, что и разборка: смена плеча работает в игре, разборка — при открытом инвентаре")]
+        [SerializeField] private KeyCode swapShoulderKey = KeyCode.X;
 
         public event Action InteractPressed;
         public event Action ToggleInventoryPressed;
         public event Action SalvagePressed;
         public event Action DropPressed;
+        public event Action SwapShoulderPressed;
 
-        // Выключается, пока открыт инвентарь: движение, камера и подбор не работают, курсор свободен.
+        // false, пока открыт инвентарь: движение, камера и подбор не работают, курсор свободен.
         public bool GameplayEnabled { get; private set; }
+        
+        public Vector2 Move
+        {
+            get
+            {
+                if (!GameplayEnabled)
+                    return Vector2.zero;
+                
+                float sideways = Input.GetAxisRaw("Horizontal");
+                float forward = Input.GetAxisRaw("Vertical");
+                return new Vector2(sideways, forward);
+            }
+        }
+        
+        public Vector2 Look
+        {
+            get
+            {
+                if (!GameplayEnabled)
+                    return Vector2.zero;
 
-        public Vector2 Move => GameplayEnabled ? move.action.ReadValue<Vector2>() : Vector2.zero;
-        public Vector2 Look => GameplayEnabled ? look.action.ReadValue<Vector2>() : Vector2.zero;
+                return Mouse.current.delta.ReadValue() * MousePixelsToAxis;
+            }
+        }
+
+        // Игрок сам освободил курсор клавишей Escape. Тогда не возвращаем его, пока игрок не кликнет в окне игры.
+        private bool cursorReleasedByPlayer;
 
         private void OnEnable()
         {
-            move.action.Enable();
-            look.action.Enable();
-            interact.action.Enable();
-            toggleInventory.action.Enable();
-            salvage.action.Enable();
-            drop.action.Enable();
-
-            interact.action.performed += OnInteract;
-            toggleInventory.action.performed += OnToggleInventory;
-            salvage.action.performed += OnSalvage;
-            drop.action.performed += OnDrop;
-
             SetGameplayEnabled(true);
         }
 
-        private void OnDisable()
+        private void Update()
         {
-            interact.action.performed -= OnInteract;
-            toggleInventory.action.performed -= OnToggleInventory;
-            salvage.action.performed -= OnSalvage;
-            drop.action.performed -= OnDrop;
+            KeepCursorInGame();
+            
+            if (Input.GetKeyDown(toggleInventoryKey))
+                ToggleInventoryPressed?.Invoke();
+
+            if (Input.GetKeyDown(salvageKey))
+                SalvagePressed?.Invoke();
+
+            if (Input.GetKeyDown(dropKey))
+                DropPressed?.Invoke();
+            
+            if (GameplayEnabled && Input.GetKeyDown(interactKey))
+                InteractPressed?.Invoke();
+
+            if (GameplayEnabled && Input.GetKeyDown(swapShoulderKey))
+                SwapShoulderPressed?.Invoke();
+        }
+        
+        private void KeepCursorInGame()
+        {
+            if (!GameplayEnabled)
+                return;
+
+            if (Input.GetKeyDown(KeyCode.Escape))
+                cursorReleasedByPlayer = true;
+            if (Input.GetMouseButtonDown(0))
+                cursorReleasedByPlayer = false;
+
+            if (cursorReleasedByPlayer)
+                return;
+
+            bool cursorFreed = Cursor.lockState != CursorLockMode.Locked || Cursor.visible;
+            if (cursorFreed)
+                LockCursor();
         }
 
         public void SetGameplayEnabled(bool enabled)
         {
             GameplayEnabled = enabled;
-            Cursor.lockState = enabled ? CursorLockMode.Locked : CursorLockMode.None;
-            Cursor.visible = !enabled;
+
+            if (enabled)
+            {
+                cursorReleasedByPlayer = false;
+                LockCursor();
+            }
+            else
+            {
+                // Инвентарь: курсор виден, им можно кликать по интерфейсу.
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
         }
 
-        private void OnInteract(InputAction.CallbackContext _)
+        private static void LockCursor()
         {
-            if (GameplayEnabled)
-                InteractPressed?.Invoke();
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
-
-        private void OnToggleInventory(InputAction.CallbackContext _) => ToggleInventoryPressed?.Invoke();
-
-        private void OnSalvage(InputAction.CallbackContext _) => SalvagePressed?.Invoke();
-
-        private void OnDrop(InputAction.CallbackContext _) => DropPressed?.Invoke();
     }
 }
